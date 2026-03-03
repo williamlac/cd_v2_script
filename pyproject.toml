@@ -1,0 +1,10 @@
+[project]
+name = "consoledeck"
+version = "2.0.0"
+description = "A customizable macro deck with Arduino hardware integration"
+requires-python = ">=3.11"
+dependencies = [
+    "pygame",
+    "pyperclip",
+    "pyserial",
+]

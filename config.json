@@ -1,38 +1,43 @@
 {
-  "BUTTON_1": {
-    "type": "link",
-    "value": "https://www.youtube.it"
+  "settings": {
+    "num_buttons": 9
   },
-  "BUTTON_2": {
-    "type": "none",
-    "value": ""
-  },
-  "BUTTON_3": {
-    "type": "none",
-    "value": ""
-  },
-  "BUTTON_4": {
-    "type": "none",
-    "value": ""
-  },
-  "BUTTON_5": {
-    "type": "none",
-    "value": ""
-  },
-  "BUTTON_6": {
-    "type": "none",
-    "value": ""
-  },
-  "BUTTON_7": {
-    "type": "none",
-    "value": ""
-  },
-  "BUTTON_8": {
-    "type": "exe",
-    "value": "C:/Program Files/Bambu Studio/bambu-studio.exe"
-  },
-  "BUTTON_9": {
-    "type": "none",
-    "value": ""
+  "buttons": {
+    "BUTTON_1": {
+      "type": "link",
+      "value": "https://www.youtube.com"
+    },
+    "BUTTON_2": {
+      "type": "none",
+      "value": ""
+    },
+    "BUTTON_3": {
+      "type": "none",
+      "value": ""
+    },
+    "BUTTON_4": {
+      "type": "none",
+      "value": ""
+    },
+    "BUTTON_5": {
+      "type": "none",
+      "value": ""
+    },
+    "BUTTON_6": {
+      "type": "none",
+      "value": ""
+    },
+    "BUTTON_7": {
+      "type": "none",
+      "value": ""
+    },
+    "BUTTON_8": {
+      "type": "none",
+      "value": ""
+    },
+    "BUTTON_9": {
+      "type": "none",
+      "value": ""
+    }
   }
 }
