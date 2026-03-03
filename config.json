@@ -2,42 +2,89 @@
   "settings": {
     "num_buttons": 9
   },
-  "buttons": {
-    "BUTTON_1": {
-      "type": "link",
-      "value": "https://www.youtube.com"
+  "modes": [
+    {
+      "name": "Default",
+      "buttons": {
+        "BUTTON_1": {
+          "type": "link",
+          "value": "https://www.youtube.com"
+        },
+        "BUTTON_2": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_3": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_4": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_5": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_6": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_7": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_8": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_9": {
+          "type": "none",
+          "value": ""
+        }
+      }
     },
-    "BUTTON_2": {
-      "type": "none",
-      "value": ""
-    },
-    "BUTTON_3": {
-      "type": "none",
-      "value": ""
-    },
-    "BUTTON_4": {
-      "type": "none",
-      "value": ""
-    },
-    "BUTTON_5": {
-      "type": "none",
-      "value": ""
-    },
-    "BUTTON_6": {
-      "type": "none",
-      "value": ""
-    },
-    "BUTTON_7": {
-      "type": "none",
-      "value": ""
-    },
-    "BUTTON_8": {
-      "type": "none",
-      "value": ""
-    },
-    "BUTTON_9": {
-      "type": "none",
-      "value": ""
+    {
+      "name": "Zoom",
+      "buttons": {
+        "BUTTON_1": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_2": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_3": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_4": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_5": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_6": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_7": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_8": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_9": {
+          "type": "none",
+          "value": ""
+        }
+      }
     }
-  }
+  ],
+  "current_mode_index": 0
 }

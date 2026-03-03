@@ -16,8 +16,7 @@ CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
 # Selected button state
 pulsante_selezionato = None
 
-# Internal state for volume
-last_volume_value = 0
+# Mute state (used by _handle_mute action)
 is_muted = False
 _saved_volume = 50
 
@@ -91,45 +90,92 @@ if PORTA_ARDUINO is None:
 # --- Config ---
 
 DEFAULT_NUM_BUTTONS = 9
+MAX_MODES = 10
+MAX_MODE_NAME_LEN = 12
+
+
+def _default_mode(num_buttons):
+    """Create a default mode with all-none buttons."""
+    buttons = {}
+    for i in range(1, num_buttons + 1):
+        buttons[f"BUTTON_{i}"] = {"type": "none", "value": ""}
+    return {"name": "Default", "buttons": buttons}
+
+
+def _default_config():
+    """Create a fresh default config."""
+    config = {
+        "settings": {"num_buttons": DEFAULT_NUM_BUTTONS},
+        "modes": [],
+        "current_mode_index": 0,
+    }
+    mode = _default_mode(DEFAULT_NUM_BUTTONS)
+    mode["buttons"]["BUTTON_1"] = {"type": "link", "value": "https://www.youtube.com"}
+    config["modes"].append(mode)
+    return config
 
 
 def load_config():
-    """Load config from disk. Supports both old flat format and new structured format."""
+    """Load config from disk. Supports old flat, structured, and new modes format."""
     print(f"[DEBUG] Loading config from: {CONFIG_FILE}")
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
             raw = json.load(f)
 
-        # New structured format
-        if "settings" in raw and "buttons" in raw:
+        if "modes" in raw:
+            # New modes format — use directly
             config = raw
+        elif "settings" in raw and "buttons" in raw:
+            # Current structured format — wrap buttons into single mode
+            config = {
+                "settings": raw["settings"],
+                "modes": [{"name": "Default", "buttons": raw["buttons"]}],
+                "current_mode_index": 0,
+            }
         else:
             # Old flat format (BUTTON_1..BUTTON_9 at top level) — migrate
             num = len([k for k in raw if k.startswith("BUTTON_")])
+            buttons = {k: v for k, v in raw.items() if k.startswith("BUTTON_")}
             config = {
                 "settings": {"num_buttons": max(num, DEFAULT_NUM_BUTTONS)},
-                "buttons": {k: v for k, v in raw.items() if k.startswith("BUTTON_")},
+                "modes": [{"name": "Default", "buttons": buttons}],
+                "current_mode_index": 0,
             }
 
-        # Ensure all buttons exist up to num_buttons
+        # Ensure settings exists
+        if "settings" not in config:
+            config["settings"] = {"num_buttons": DEFAULT_NUM_BUTTONS}
+
+        # Ensure at least one mode
+        if not config.get("modes"):
+            num_buttons = config["settings"].get("num_buttons", DEFAULT_NUM_BUTTONS)
+            config["modes"] = [_default_mode(num_buttons)]
+
+        # Ensure current_mode_index exists and is valid
+        if "current_mode_index" not in config:
+            config["current_mode_index"] = 0
+
+        # Validate all modes have all buttons
         num_buttons = config["settings"].get("num_buttons", DEFAULT_NUM_BUTTONS)
-        for i in range(1, num_buttons + 1):
-            key = f"BUTTON_{i}"
-            if key not in config["buttons"]:
-                config["buttons"][key] = {"type": "none", "value": ""}
+        for mode in config["modes"]:
+            if "name" not in mode:
+                mode["name"] = "Default"
+            if "buttons" not in mode:
+                mode["buttons"] = {}
+            for i in range(1, num_buttons + 1):
+                key = f"BUTTON_{i}"
+                if key not in mode["buttons"]:
+                    mode["buttons"][key] = {"type": "none", "value": ""}
+
+        # Clamp mode index
+        idx = config["current_mode_index"]
+        config["current_mode_index"] = max(0, min(idx, len(config["modes"]) - 1))
 
         print("[DEBUG] Config loaded:", json.dumps(config, indent=2))
         return config
     else:
         print("[DEBUG] Config file not found, creating default config.")
-        config = {
-            "settings": {"num_buttons": DEFAULT_NUM_BUTTONS},
-            "buttons": {},
-        }
-        for i in range(1, DEFAULT_NUM_BUTTONS + 1):
-            config["buttons"][f"BUTTON_{i}"] = {"type": "none", "value": ""}
-        config["buttons"]["BUTTON_1"] = {"type": "link", "value": "https://www.youtube.com"}
-        return config
+        return _default_config()
 
 
 def save_config(config):
@@ -137,14 +183,57 @@ def save_config(config):
         json.dump(config, f, indent=2)
 
 
-def get_buttons(config):
-    """Get the buttons dict from config."""
-    return config.get("buttons", config)
+# --- Mode helpers ---
+
+def get_modes(config):
+    """Get the list of modes."""
+    return config.get("modes", [])
+
+
+def get_current_mode(config):
+    """Get the current mode dict from config."""
+    modes = config.get("modes", [])
+    idx = config.get("current_mode_index", 0)
+    if not modes:
+        return {"name": "Default", "buttons": {}}
+    idx = max(0, min(idx, len(modes) - 1))
+    return modes[idx]
+
+
+def get_current_buttons(config):
+    """Get the buttons dict for the currently active mode."""
+    mode = get_current_mode(config)
+    return mode.get("buttons", {})
 
 
 def get_num_buttons(config):
     """Get the configured number of buttons."""
     return config.get("settings", {}).get("num_buttons", DEFAULT_NUM_BUTTONS)
+
+
+def set_current_mode_index(config, index):
+    """Set the active mode index."""
+    modes = config.get("modes", [])
+    if modes:
+        config["current_mode_index"] = max(0, min(index, len(modes) - 1))
+
+
+def send_modes_to_arduino(ser, config):
+    """Send the mode name list to Arduino over serial."""
+    modes = config.get("modes", [])
+    names = [m["name"] for m in modes]
+    message = "MODES:" + ",".join(names) + "\n"
+    ser.write(message.encode("utf-8"))
+    ser.flush()
+    print(f"[DEBUG] Sent to Arduino: {message.strip()}")
+
+
+def send_set_mode_to_arduino(ser, index):
+    """Tell Arduino to display a specific mode."""
+    message = f"SET_MODE:{index}\n"
+    ser.write(message.encode("utf-8"))
+    ser.flush()
+    print(f"[DEBUG] Sent to Arduino: {message.strip()}")
 
 
 # --- Action Handlers ---
@@ -207,6 +296,72 @@ def _handle_shortcut(value):
         print(f"[DEBUG] Shortcut fired: {value}")
 
 
+def _handle_volume_up(value):
+    """Increase system volume by ~6%."""
+    script = (
+        "set curVol to output volume of (get volume settings)\n"
+        "set newVol to curVol + 6\n"
+        "if newVol > 100 then set newVol to 100\n"
+        "set volume output volume newVol"
+    )
+    subprocess.run(["osascript", "-e", script], capture_output=True)
+    print("[DEBUG] Volume up")
+
+
+def _handle_volume_down(value):
+    """Decrease system volume by ~6%."""
+    script = (
+        "set curVol to output volume of (get volume settings)\n"
+        "set newVol to curVol - 6\n"
+        "if newVol < 0 then set newVol to 0\n"
+        "set volume output volume newVol"
+    )
+    subprocess.run(["osascript", "-e", script], capture_output=True)
+    print("[DEBUG] Volume down")
+
+
+def _handle_mute(value):
+    """Toggle mute with save/restore volume."""
+    global is_muted, _saved_volume
+    if not is_muted:
+        result = subprocess.run(
+            ["osascript", "-e", "output volume of (get volume settings)"],
+            capture_output=True,
+            text=True,
+        )
+        try:
+            _saved_volume = int(result.stdout.strip())
+        except ValueError:
+            _saved_volume = 50
+        subprocess.run(["osascript", "-e", "set volume output volume 0"], capture_output=True)
+    else:
+        subprocess.run(
+            ["osascript", "-e", f"set volume output volume {_saved_volume}"],
+            capture_output=True,
+        )
+    is_muted = not is_muted
+    print(f"[DEBUG] Mute toggled -> {'ON' if is_muted else 'OFF'}")
+
+
+def _handle_media(value):
+    """Play/pause media — tries Spotify first, then Music."""
+    script = """
+    try
+        tell application "System Events"
+            if (name of processes) contains "Spotify" then
+                tell application "Spotify" to playpause
+                return
+            end if
+        end tell
+    end try
+    try
+        tell application "Music" to playpause
+    end try
+    """
+    subprocess.run(["osascript", "-e", script], capture_output=True)
+    print("[DEBUG] Media play/pause triggered")
+
+
 def _handle_none(value):
     print("[DEBUG] No action defined")
 
@@ -216,6 +371,10 @@ ACTION_HANDLERS = {
     "link": _handle_link,
     "exe": _handle_app,
     "shortcut": _handle_shortcut,
+    "volume_up": _handle_volume_up,
+    "volume_down": _handle_volume_down,
+    "mute": _handle_mute,
+    "media": _handle_media,
     "none": _handle_none,
 }
 
@@ -238,92 +397,50 @@ def ascolta_seriale(config):
         print("[INFO] Connect an Arduino and restart the application.")
         return
 
-    buttons = get_buttons(config)
     try:
         with serial.Serial(PORTA_ARDUINO, BAUDRATE, timeout=1) as ser:
             print(f"Connected to {PORTA_ARDUINO}")
+            time.sleep(2)  # wait for Arduino reset after serial open
+
+            # Send mode list and current mode to Arduino
+            send_modes_to_arduino(ser, config)
+            idx = config.get("current_mode_index", 0)
+            send_set_mode_to_arduino(ser, idx)
+
             while True:
                 linea = ser.readline().decode("utf-8").strip()
-                if linea:
-                    print("Received:", linea)
-                    if linea.startswith("VOLUME_"):
-                        valore = linea.replace("VOLUME_", "")
-                        gestisci_volume(valore)
-                    elif linea == "MUTE":
-                        gestisci_mute()
-                    elif linea == "MEDIA":
-                        gestisci_media()
-                    elif linea in buttons:
+                if not linea:
+                    continue
+
+                print("Received:", linea)
+
+                if linea.startswith("MODE:"):
+                    # Encoder turned — switch mode
+                    try:
+                        new_index = int(linea.split(":")[1])
+                        set_current_mode_index(config, new_index)
+                        save_config(config)
+                        mode_name = get_current_mode(config)["name"]
+                        print(f"[DEBUG] Mode switched to: {mode_name}")
+                    except (ValueError, IndexError):
+                        print(f"[ERROR] Invalid mode message: {linea}")
+
+                elif linea == "MODE_PRESS":
+                    # Encoder press — no-op for now
+                    print("[DEBUG] Encoder press (MODE_PRESS)")
+
+                elif linea.startswith("BUTTON_"):
+                    buttons = get_current_buttons(config)
+                    if linea in buttons:
                         esegui_azione(buttons[linea])
+                    else:
+                        mode_name = get_current_mode(config)["name"]
+                        print(f"[WARNING] {linea} not configured in mode '{mode_name}'")
+
     except Exception as e:
         print(f"[ERROR] Serial port: {e}")
         time.sleep(5)
         ascolta_seriale(config)
-
-
-# --- Volume / Mute / Media (macOS via AppleScript) ---
-
-def gestisci_volume(value):
-    global last_volume_value
-    try:
-        valore = int(value)
-        delta = valore - last_volume_value
-        if delta != 0:
-            step = 6.25 * delta
-            script = (
-                f"set curVol to output volume of (get volume settings)\n"
-                f"set newVol to curVol + {step}\n"
-                f"if newVol > 100 then set newVol to 100\n"
-                f"if newVol < 0 then set newVol to 0\n"
-                f"set volume output volume newVol"
-            )
-            subprocess.run(["osascript", "-e", script], capture_output=True)
-            print(f"[DEBUG] Volume adjusted by {delta}")
-        last_volume_value = valore
-    except ValueError:
-        print("[ERROR] Invalid volume value:", value)
-
-
-def gestisci_mute():
-    global is_muted, _saved_volume
-    if not is_muted:
-        # Save current volume then mute
-        result = subprocess.run(
-            ["osascript", "-e", "output volume of (get volume settings)"],
-            capture_output=True,
-            text=True,
-        )
-        try:
-            _saved_volume = int(result.stdout.strip())
-        except ValueError:
-            _saved_volume = 50
-        subprocess.run(["osascript", "-e", "set volume output volume 0"], capture_output=True)
-    else:
-        # Restore saved volume
-        subprocess.run(
-            ["osascript", "-e", f"set volume output volume {_saved_volume}"],
-            capture_output=True,
-        )
-    is_muted = not is_muted
-    print(f"[DEBUG] Mute toggled -> {'ON' if is_muted else 'OFF'}")
-
-
-def gestisci_media():
-    script = """
-    try
-        tell application "System Events"
-            if (name of processes) contains "Spotify" then
-                tell application "Spotify" to playpause
-                return
-            end if
-        end tell
-    end try
-    try
-        tell application "Music" to playpause
-    end try
-    """
-    subprocess.run(["osascript", "-e", script], capture_output=True)
-    print("[DEBUG] Media play/pause triggered")
 
 
 # --- Button selection ---
