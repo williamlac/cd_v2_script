@@ -82,9 +82,11 @@ def detect_arduino_port():
     return None
 
 
-PORTA_ARDUINO = detect_arduino_port()
+PORTA_ARDUINO = os.environ.get("CONSOLEDECK_PORT") or detect_arduino_port()
 if PORTA_ARDUINO is None:
     print("[WARNING] No Arduino detected. Serial features will not work.")
+else:
+    print(f"[DEBUG] Using serial port: {PORTA_ARDUINO}")
 
 
 # --- Config ---

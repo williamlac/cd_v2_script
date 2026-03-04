@@ -11,8 +11,8 @@
           "value": "https://www.youtube.com"
         },
         "BUTTON_2": {
-          "type": "none",
-          "value": ""
+          "type": "link",
+          "value": "https://reddit.com"
         },
         "BUTTON_3": {
           "type": "none",
@@ -48,11 +48,11 @@
       "name": "Zoom",
       "buttons": {
         "BUTTON_1": {
-          "type": "none",
+          "type": "volume_up",
           "value": ""
         },
         "BUTTON_2": {
-          "type": "none",
+          "type": "volume_down",
           "value": ""
         },
         "BUTTON_3": {
