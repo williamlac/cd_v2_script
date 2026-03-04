@@ -48,8 +48,8 @@
       "name": "Zoom",
       "buttons": {
         "BUTTON_1": {
-          "type": "volume_up",
-          "value": ""
+          "type": "exe",
+          "value": "/Applications/zoom.us.app"
         },
         "BUTTON_2": {
           "type": "volume_down",
@@ -84,7 +84,48 @@
           "value": ""
         }
       }
+    },
+    {
+      "name": "Cursor",
+      "buttons": {
+        "BUTTON_1": {
+          "type": "exe",
+          "value": "/Applications/Cursor.app/"
+        },
+        "BUTTON_2": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_3": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_4": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_5": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_6": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_7": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_8": {
+          "type": "none",
+          "value": ""
+        },
+        "BUTTON_9": {
+          "type": "none",
+          "value": ""
+        }
+      }
     }
   ],
-  "current_mode_index": 0
+  "current_mode_index": 2
 }
