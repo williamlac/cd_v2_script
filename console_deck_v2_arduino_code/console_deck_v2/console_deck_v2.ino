@@ -124,7 +124,7 @@ void handleEncoder() {
   if (!modesReceived || numModes == 0) return;
 
   int currentStateCLK = digitalRead(CLK);
-  if (currentStateCLK != lastStateCLK) {
+  if (currentStateCLK != lastStateCLK && currentStateCLK == LOW) {
     if (digitalRead(DT) != currentStateCLK) {
       currentMode++;
       if (currentMode >= numModes) currentMode = 0;
