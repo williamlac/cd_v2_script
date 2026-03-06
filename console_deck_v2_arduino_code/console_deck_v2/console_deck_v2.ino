@@ -21,9 +21,10 @@ const int NUM_BUTTONS = 9;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 bool displayReady = false;
 
-// --- Mode state ---
+// --- Mode state (fixed-size char arrays to avoid heap fragmentation) ---
 #define MAX_MODES 10
-String modeNames[MAX_MODES];
+#define MAX_NAME_LEN 12
+char modeNames[MAX_MODES][MAX_NAME_LEN + 1];
 int numModes = 0;
 int currentMode = 0;
 bool modesReceived = false;
@@ -88,35 +89,55 @@ void loop() {
 }
 
 // --- Serial input: parse MODES: and SET_MODE: from Python ---
-void handleSerialInput() {
-  if (Serial.available()) {
-    String line = Serial.readStringUntil('\n');
-    line.trim();
+// Uses a static char buffer to avoid any heap allocation (String class)
+static char serialBuf[80];
+static uint8_t serialPos = 0;
 
-    if (line.startsWith("MODES:")) {
-      String payload = line.substring(6);
-      numModes = 0;
-      int start = 0;
-      for (int i = 0; i <= (int)payload.length(); i++) {
-        if (i == (int)payload.length() || payload[i] == ',') {
-          if (numModes < MAX_MODES) {
-            modeNames[numModes] = payload.substring(start, i);
-            numModes++;
-          }
-          start = i + 1;
+void processLine(const char* line) {
+  if (strncmp(line, "MODES:", 6) == 0) {
+    const char* payload = line + 6;
+    numModes = 0;
+    const char* start = payload;
+    for (const char* p = payload; ; p++) {
+      if (*p == ',' || *p == '\0') {
+        if (numModes < MAX_MODES) {
+          int len = p - start;
+          if (len > MAX_NAME_LEN) len = MAX_NAME_LEN;
+          memcpy(modeNames[numModes], start, len);
+          modeNames[numModes][len] = '\0';
+          numModes++;
         }
+        if (*p == '\0') break;
+        start = p + 1;
       }
-      modesReceived = true;
-      if (currentMode >= numModes) currentMode = 0;
-      displayOffset = (float)currentMode;
     }
-    else if (line.startsWith("SET_MODE:")) {
-      int idx = line.substring(9).toInt();
-      if (idx >= 0 && idx < numModes) {
-        currentMode = idx;
-        displayOffset = (float)idx;
-        wheelActive = false;
+    modesReceived = true;
+    if (currentMode >= numModes) currentMode = 0;
+    displayOffset = (float)currentMode;
+  }
+  else if (strncmp(line, "SET_MODE:", 9) == 0) {
+    int idx = atoi(line + 9);
+    if (idx >= 0 && idx < numModes) {
+      currentMode = idx;
+      displayOffset = (float)idx;
+      wheelActive = false;
+    }
+  }
+}
+
+void handleSerialInput() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') {
+      if (serialPos > 0) {
+        // Trim trailing \r
+        if (serialBuf[serialPos - 1] == '\r') serialPos--;
+        serialBuf[serialPos] = '\0';
+        processLine(serialBuf);
       }
+      serialPos = 0;
+    } else if (serialPos < sizeof(serialBuf) - 1) {
+      serialBuf[serialPos++] = c;
     }
   }
 }
@@ -159,7 +180,7 @@ void handleEncoderPress() {
   }
 }
 
-// --- Button presses: BUTTON_1 through BUTTON_10 ---
+// --- Button presses: BUTTON_1 through BUTTON_9 ---
 void handleButtons() {
   for (int i = 0; i < NUM_BUTTONS; i++) {
     if (digitalRead(buttonPins[i]) == LOW) {
@@ -216,16 +237,18 @@ void updateDisplay() {
       int y = (int)yFloat;
 
       if (y > -ITEM_HEIGHT && y < SCREEN_HEIGHT) {
-        String name = modeNames[modeIdx];
+        // Use a stack buffer — no heap allocation
+        char name[MAX_NAME_LEN + 1];
+        strncpy(name, modeNames[modeIdx], MAX_NAME_LEN);
+        name[MAX_NAME_LEN] = '\0';
 
         if (offset == 0) {
           // Center item: larger text
           display.setTextSize(2);
-          if (name.length() > 10) name = name.substring(0, 10);
+          if (strlen(name) > 10) name[10] = '\0';
         } else {
           // Adjacent items: smaller text
           display.setTextSize(1);
-          if (name.length() > 21) name = name.substring(0, 21);
         }
 
         int16_t x1, y1;
@@ -238,8 +261,10 @@ void updateDisplay() {
   } else {
     // Static display: show current mode name large and centered
     display.setTextSize(2);
-    String name = modeNames[currentMode];
-    if (name.length() > 10) name = name.substring(0, 10);
+    char name[MAX_NAME_LEN + 1];
+    strncpy(name, modeNames[currentMode], MAX_NAME_LEN);
+    name[MAX_NAME_LEN] = '\0';
+    if (strlen(name) > 10) name[10] = '\0';
 
     int16_t x1, y1;
     uint16_t w, h;
