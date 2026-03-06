@@ -8,10 +8,9 @@
 #define SW 3        // Rotary encoder push button
 // I2C for SSD1306: A4 (SDA), A5 (SCL) — hardware I2C
 
-// Pin order matches BUTTON_1..BUTTON_10 for the Python side
-// Schematic: SW8=A1, SW9=A0, SW5=D11, SW6=D10, SW7=D9, SW11=D2, SW2=D6, SW3=D7, SW4=D8, SW10=D12
-const int buttonPins[] = {A1, A0, 11, 10, 9, 2, 6, 7, 8, 12};
-const int NUM_BUTTONS = 10;
+// BUTTON_1..BUTTON_9 in desired order
+const int buttonPins[] = {6, 7, 8, 9, 10, 11, 12, A0, A1};
+const int NUM_BUTTONS = 9;
 
 // --- OLED display ---
 #define SCREEN_WIDTH 128
@@ -133,13 +132,13 @@ void handleEncoder() {
       if (currentMode < 0) currentMode = numModes - 1;
     }
 
-    Serial.print("MODE:");
     Serial.println(currentMode);
 
     lastKnobTime = millis();
     wheelActive = true;
+    Serial.print("DEBUG turn CCW -> mode "); Serial.println(currentMode);
+    lastKnobTime = millis(); wheelActive = true;
   }
-  lastStateCLK = currentStateCLK;
 }
 
 // --- Encoder button press ---

@@ -7,12 +7,12 @@
       "name": "Default",
       "buttons": {
         "BUTTON_1": {
-          "type": "link",
-          "value": "https://www.youtube.com"
+          "type": "none",
+          "value": ""
         },
         "BUTTON_2": {
-          "type": "link",
-          "value": "https://reddit.com"
+          "type": "none",
+          "value": ""
         },
         "BUTTON_3": {
           "type": "none",
@@ -48,11 +48,11 @@
       "name": "Zoom",
       "buttons": {
         "BUTTON_1": {
-          "type": "exe",
-          "value": "/Applications/zoom.us.app"
+          "type": "none",
+          "value": ""
         },
         "BUTTON_2": {
-          "type": "volume_down",
+          "type": "none",
           "value": ""
         },
         "BUTTON_3": {
@@ -89,8 +89,8 @@
       "name": "Cursor",
       "buttons": {
         "BUTTON_1": {
-          "type": "exe",
-          "value": "/Applications/Cursor.app/"
+          "type": "none",
+          "value": ""
         },
         "BUTTON_2": {
           "type": "none",
@@ -127,5 +127,5 @@
       }
     }
   ],
-  "current_mode_index": 2
+  "current_mode_index": 0
 }
