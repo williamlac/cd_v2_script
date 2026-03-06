@@ -27,6 +27,7 @@ bool displayReady = false;
 char modeNames[MAX_MODES][MAX_NAME_LEN + 1];
 int numModes = 0;
 int currentMode = 0;
+int virtualMode = 0;       // unbounded position for endless scroll illusion
 bool modesReceived = false;
 
 // Encoder quadrature lookup: maps 4-bit (prevAB << 2 | newAB) to direction
@@ -113,12 +114,14 @@ void processLine(const char* line) {
     }
     modesReceived = true;
     if (currentMode >= numModes) currentMode = 0;
-    displayOffset = (float)currentMode;
+    virtualMode = currentMode;
+    displayOffset = (float)virtualMode;
   }
   else if (strncmp(line, "SET_MODE:", 9) == 0) {
     int idx = atoi(line + 9);
     if (idx >= 0 && idx < numModes) {
       currentMode = idx;
+      virtualMode = idx;
       displayOffset = (float)idx;
       wheelActive = false;
     }
@@ -160,13 +163,15 @@ void handleEncoder() {
   if (accumulator >= 2) {
     accumulator = 0;
     if (!modesReceived || numModes == 0) return;
-    currentMode = (currentMode + 1) % numModes;
+    virtualMode++;
+    currentMode = ((virtualMode % numModes) + numModes) % numModes;
     Serial.print("MODE:"); Serial.println(currentMode);
     lastKnobTime = millis(); wheelActive = true;
   } else if (accumulator <= -2) {
     accumulator = 0;
     if (!modesReceived || numModes == 0) return;
-    currentMode = (currentMode - 1 + numModes) % numModes;
+    virtualMode--;
+    currentMode = ((virtualMode % numModes) + numModes) % numModes;
     Serial.print("MODE:"); Serial.println(currentMode);
     lastKnobTime = millis(); wheelActive = true;
   }
@@ -198,25 +203,16 @@ void updateDisplay() {
   display.clearDisplay();
 
   if (wheelActive) {
-    // Animate offset toward current mode
-    float diff = (float)currentMode - displayOffset;
-
-    // Handle wrapping for smooth animation
-    if (diff > numModes / 2.0) diff -= numModes;
-    if (diff < -numModes / 2.0) diff += numModes;
-
+    // Animate offset toward virtualMode (unbounded, no wrapping)
+    float target = (float)virtualMode;
+    float diff = target - displayOffset;
     displayOffset += diff * 0.3;
-
-    // Wrap displayOffset into valid range
-    if (displayOffset < 0) displayOffset += numModes;
-    if (displayOffset >= numModes) displayOffset -= numModes;
-
-    if (abs(diff) < 0.05) displayOffset = (float)currentMode;
+    if (abs(diff) < 0.05) displayOffset = target;
 
     // Check timeout
     if (millis() - lastKnobTime > WHEEL_TIMEOUT) {
       wheelActive = false;
-      displayOffset = (float)currentMode;
+      displayOffset = target;
     }
 
     // Draw picker
@@ -225,15 +221,13 @@ void updateDisplay() {
     // Draw highlight rectangle for center slot
     display.drawRoundRect(0, centerY - 2, SCREEN_WIDTH, ITEM_HEIGHT + 4, 4, SSD1306_WHITE);
 
-    // Draw visible items
+    // Draw visible items — use virtualMode for positions, modulo for names
     for (int offset = -2; offset <= 2; offset++) {
-      int modeIdx = currentMode + offset;
-      // Handle wrapping
-      while (modeIdx < 0) modeIdx += numModes;
-      while (modeIdx >= numModes) modeIdx -= numModes;
+      int virtualIdx = virtualMode + offset;
+      int modeIdx = ((virtualIdx % numModes) + numModes) % numModes;
 
       float yFloat = (float)centerY + (float)offset * ITEM_HEIGHT
-                      - (displayOffset - (float)currentMode) * ITEM_HEIGHT;
+                      - (displayOffset - (float)virtualMode) * ITEM_HEIGHT;
       int y = (int)yFloat;
 
       if (y > -ITEM_HEIGHT && y < SCREEN_HEIGHT) {
