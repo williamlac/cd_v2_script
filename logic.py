@@ -402,7 +402,19 @@ def ascolta_seriale(config):
     try:
         with serial.Serial(PORTA_ARDUINO, BAUDRATE, timeout=1) as ser:
             print(f"Connected to {PORTA_ARDUINO}")
-            time.sleep(2)  # wait for Arduino reset after serial open
+
+            # Wait for Arduino to finish booting and send READY
+            print("[DEBUG] Waiting for Arduino READY signal...")
+            ready = False
+            for _ in range(15):  # up to 15 seconds
+                line = ser.readline().decode("utf-8", errors="replace").strip()
+                if line:
+                    print(f"[DEBUG] Arduino boot: {line}")
+                if line == "READY":
+                    ready = True
+                    break
+            if not ready:
+                print("[WARNING] No READY signal received, sending config anyway")
 
             # Send mode list and current mode to Arduino
             send_modes_to_arduino(ser, config)

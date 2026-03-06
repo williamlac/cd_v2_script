@@ -28,8 +28,9 @@ int numModes = 0;
 int currentMode = 0;
 bool modesReceived = false;
 
-// --- Encoder state ---
-int lastStateCLK;
+// Encoder quadrature lookup: maps 4-bit (prevAB << 2 | newAB) to direction
+// +1 = CW, -1 = CCW, 0 = bounce/invalid
+static const int8_t ENC_STATES[] = {0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0};
 
 // --- Wheel animation ---
 float displayOffset = 0.0;
@@ -49,7 +50,6 @@ void setup() {
   pinMode(CLK, INPUT);
   pinMode(DT, INPUT);
   pinMode(SW, INPUT_PULLUP);
-  lastStateCLK = digitalRead(CLK);
 
   // Button pins
   for (int i = 0; i < NUM_BUTTONS; i++) {
@@ -68,6 +68,9 @@ void setup() {
     display.println("config...");
     display.display();
   }
+
+  // Tell Python we're ready to receive config
+  Serial.println("READY");
 }
 
 void loop() {
@@ -120,23 +123,30 @@ void handleSerialInput() {
 
 // --- Encoder rotation: cycle through modes ---
 void handleEncoder() {
-  if (!modesReceived || numModes == 0) return;
+  // Track both CLK and DT as a 2-bit state; accumulate valid steps
+  static uint8_t oldAB = 0b11;
+  static int8_t  accumulator = 0;
 
-  int currentStateCLK = digitalRead(CLK);
-  if (currentStateCLK != lastStateCLK && currentStateCLK == LOW) {
-    if (digitalRead(DT) != currentStateCLK) {
-      currentMode++;
-      if (currentMode >= numModes) currentMode = 0;
-    } else {
-      currentMode--;
-      if (currentMode < 0) currentMode = numModes - 1;
-    }
+  uint8_t clkVal = digitalRead(CLK);
+  uint8_t dtVal  = digitalRead(DT);
+  uint8_t newAB  = (clkVal << 1) | dtVal;
+  uint8_t prevAB = oldAB & 0x03;
+  oldAB = ((oldAB << 2) | newAB) & 0x0f;
+  int8_t step = ENC_STATES[oldAB];
+  accumulator += step;
 
-    Serial.println(currentMode);
-
-    lastKnobTime = millis();
-    wheelActive = true;
-    Serial.print("DEBUG turn CCW -> mode "); Serial.println(currentMode);
+  // One detent = 2 raw quadrature steps on this encoder
+  if (accumulator >= 2) {
+    accumulator = 0;
+    if (!modesReceived || numModes == 0) return;
+    currentMode = (currentMode + 1) % numModes;
+    Serial.print("MODE:"); Serial.println(currentMode);
+    lastKnobTime = millis(); wheelActive = true;
+  } else if (accumulator <= -2) {
+    accumulator = 0;
+    if (!modesReceived || numModes == 0) return;
+    currentMode = (currentMode - 1 + numModes) % numModes;
+    Serial.print("MODE:"); Serial.println(currentMode);
     lastKnobTime = millis(); wheelActive = true;
   }
 }

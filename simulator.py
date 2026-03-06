@@ -128,6 +128,10 @@ old_settings = termios.tcgetattr(fd)
 try:
     tty.setraw(fd)
     rprint_header()
+
+    # Send READY signal like the real Arduino does after boot
+    send("READY")
+
     rprint("Waiting for app to connect…  (press a key once connected)")
     rprint()
 
