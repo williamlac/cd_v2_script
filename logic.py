@@ -220,6 +220,29 @@ def set_current_mode_index(config, index):
         config["current_mode_index"] = max(0, min(index, len(modes) - 1))
 
 
+def build_app_triggers(config):
+    """Return {app_name_lowercase: mode_index} for modes that have app_trigger set."""
+    triggers = {}
+    for i, mode in enumerate(config.get("modes", [])):
+        trigger = mode.get("app_trigger", "").strip()
+        if trigger:
+            triggers[trigger.lower()] = i
+    return triggers
+
+
+def get_frontmost_app():
+    """Return the name of the frontmost macOS application, or '' on failure."""
+    try:
+        result = subprocess.run(
+            ["osascript", "-e",
+             'tell application "System Events" to name of first application process whose frontmost is true'],
+            capture_output=True, text=True, timeout=2,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
 def send_modes_to_arduino(ser, config):
     """Send the mode name list to Arduino over serial."""
     modes = config.get("modes", [])
@@ -364,6 +387,12 @@ def _handle_media(value):
     print("[DEBUG] Media play/pause triggered")
 
 
+def _handle_screenshot(value):
+    """Interactive area screenshot, copied to clipboard (like cmd+ctrl+shift+4)."""
+    subprocess.Popen(["screencapture", "-i", "-c"])
+    print("[DEBUG] Screenshot interactive mode started -> clipboard")
+
+
 def _handle_none(value):
     print("[DEBUG] No action defined")
 
@@ -373,6 +402,7 @@ ACTION_HANDLERS = {
     "link": _handle_link,
     "exe": _handle_app,
     "shortcut": _handle_shortcut,
+    "screenshot": _handle_screenshot,
     "volume_up": _handle_volume_up,
     "volume_down": _handle_volume_down,
     "mute": _handle_mute,
@@ -421,7 +451,53 @@ def ascolta_seriale(config):
             idx = config.get("current_mode_index", 0)
             send_set_mode_to_arduino(ser, idx)
 
+            last_config_mtime = os.path.getmtime(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else 0
+            app_triggers = build_app_triggers(config)
+            last_frontmost_app = ""
+            auto_switched = False
+            pre_auto_mode_idx = config.get("current_mode_index", 0)
+            last_app_check = 0.0
+
             while True:
+                # Hot-reload: resend config if file changed on disk
+                try:
+                    mtime = os.path.getmtime(CONFIG_FILE)
+                    if mtime != last_config_mtime:
+                        last_config_mtime = mtime
+                        new_config = load_config()
+                        config.clear()
+                        config.update(new_config)
+                        app_triggers = build_app_triggers(config)
+                        print("[DEBUG] Config changed on disk — reloading")
+                        send_modes_to_arduino(ser, config)
+                        send_set_mode_to_arduino(ser, config.get("current_mode_index", 0))
+                except (OSError, json.JSONDecodeError) as e:
+                    print(f"[WARNING] Config reload skipped: {e}")
+
+                # App trigger: auto-switch mode based on frontmost app (check once per second)
+                now = time.time()
+                if now - last_app_check >= 1.0:
+                    last_app_check = now
+                    frontmost = get_frontmost_app()
+                    if frontmost != last_frontmost_app:
+                        last_frontmost_app = frontmost
+                        fl = frontmost.lower()
+                        triggered_idx = next(
+                            (idx for trigger, idx in app_triggers.items() if trigger in fl),
+                            None,
+                        )
+                        if triggered_idx is not None and not auto_switched:
+                            pre_auto_mode_idx = config.get("current_mode_index", 0)
+                            auto_switched = True
+                            set_current_mode_index(config, triggered_idx)
+                            send_set_mode_to_arduino(ser, triggered_idx)
+                            print(f"[DEBUG] App trigger: '{frontmost}' → mode {triggered_idx}")
+                        elif triggered_idx is None and auto_switched:
+                            auto_switched = False
+                            set_current_mode_index(config, pre_auto_mode_idx)
+                            send_set_mode_to_arduino(ser, pre_auto_mode_idx)
+                            print(f"[DEBUG] App trigger: left app → restored mode {pre_auto_mode_idx}")
+
                 linea = ser.readline().decode("utf-8").strip()
                 if not linea:
                     continue
