@@ -10,11 +10,11 @@ SCREEN = None
 BTN_SIZE = 100
 SPACING_X = 140
 SPACING_Y = 120
-MARGIN_Y = 20
+MARGIN_Y = 60  # shifted down to make room for mode bar
 SCREEN_WIDTH = 640
 COLS = 3
 
-# Global UI state
+# Global UI state — button config panel
 cancel_button_rect = None
 browse_button_rect = None
 save_button_rect = None
@@ -29,21 +29,42 @@ save_clicked = False
 input_active = False
 input_rect = None
 
+# Global UI state — mode selector bar
+mode_left_rect = None
+mode_right_rect = None
+mode_add_rect = None
+mode_delete_rect = None
+mode_name_rect = None
+mode_name_editing = False
+temp_mode_name = None
+mode_name_input_rect = None
+
 # Action type definitions: (internal_key, display_label)
-# Add new types here — they'll automatically appear in the GUI
+# Row 1: original types. Row 2: hardware replacement types.
 ACTION_TYPES = [
     ("link", "LINK"),
     ("exe", "APP"),
     ("shortcut", "SHORTCUT"),
     ("none", "NONE"),
+    ("volume_up", "VOL+"),
+    ("volume_down", "VOL-"),
+    ("mute", "MUTE"),
+    ("media", "MEDIA"),
 ]
+
+# Types that need a text input field
+INPUT_TYPES = {"link", "shortcut"}
+
+# Types that need a browse button
+BROWSE_TYPES = {"exe"}
 
 
 def _compute_screen_height(num_buttons):
     """Compute screen height based on number of buttons."""
     rows = math.ceil(num_buttons / COLS)
-    grid_height = MARGIN_Y + rows * SPACING_Y + 5
-    config_panel_height = 250  # space for config panel below grid
+    mode_bar_height = 40
+    grid_height = mode_bar_height + MARGIN_Y + rows * SPACING_Y + 5
+    config_panel_height = 300  # space for config panel below grid (two rows of types)
     return grid_height + config_panel_height
 
 
@@ -57,12 +78,81 @@ def init_pygame(num_buttons=9):
     pygame.display.set_caption("ConsoleDeck V2")
 
 
+def disegna_mode_selector(config):
+    """Draw the mode selector bar at the top of the screen."""
+    global mode_left_rect, mode_right_rect, mode_add_rect, mode_delete_rect
+    global mode_name_rect, mode_name_input_rect
+
+    modes = config.get("modes", [])
+    current_idx = config.get("current_mode_index", 0)
+    current_name = modes[current_idx]["name"] if modes else "Default"
+
+    bar_y = 8
+    bar_height = 30
+
+    small_font = pygame.font.SysFont(None, 16)
+
+    # Delete button (-)
+    mode_delete_rect = pygame.Rect(20, bar_y, 30, bar_height)
+    color = (120, 60, 60) if len(modes) > 1 else (60, 60, 60)
+    pygame.draw.rect(SCREEN, color, mode_delete_rect, border_radius=5)
+    minus_text = FONT.render("-", True, (255, 255, 255))
+    SCREEN.blit(minus_text, minus_text.get_rect(center=mode_delete_rect.center))
+
+    # Left arrow (<)
+    mode_left_rect = pygame.Rect(70, bar_y, 30, bar_height)
+    pygame.draw.rect(SCREEN, (80, 80, 80), mode_left_rect, border_radius=5)
+    arrow_l = FONT.render("<", True, (255, 255, 255))
+    SCREEN.blit(arrow_l, arrow_l.get_rect(center=mode_left_rect.center))
+
+    # Mode name (centered) — clickable to rename
+    if mode_name_editing:
+        display_name = temp_mode_name if temp_mode_name is not None else current_name
+        # Draw editable text field
+        mode_name_input_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, bar_y, 200, bar_height)
+        pygame.draw.rect(SCREEN, (255, 255, 255), mode_name_input_rect, border_radius=4)
+        name_text = FONT.render(display_name, True, (0, 0, 0))
+        SCREEN.blit(name_text, name_text.get_rect(center=mode_name_input_rect.center))
+        mode_name_rect = mode_name_input_rect
+    else:
+        mode_name_input_rect = None
+        name_text = FONT.render(current_name, True, (200, 120, 40))
+        mode_name_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, bar_y, 200, bar_height)
+        SCREEN.blit(name_text, name_text.get_rect(center=mode_name_rect.center))
+
+    # Right arrow (>)
+    mode_right_rect = pygame.Rect(SCREEN_WIDTH - 100, bar_y, 30, bar_height)
+    pygame.draw.rect(SCREEN, (80, 80, 80), mode_right_rect, border_radius=5)
+    arrow_r = FONT.render(">", True, (255, 255, 255))
+    SCREEN.blit(arrow_r, arrow_r.get_rect(center=mode_right_rect.center))
+
+    # Add button (+)
+    mode_add_rect = pygame.Rect(SCREEN_WIDTH - 50, bar_y, 30, bar_height)
+    pygame.draw.rect(SCREEN, (60, 120, 60), mode_add_rect, border_radius=5)
+    plus_text = FONT.render("+", True, (255, 255, 255))
+    SCREEN.blit(plus_text, plus_text.get_rect(center=mode_add_rect.center))
+
+    # Mode indicator: "1/3"
+    indicator = small_font.render(
+        f"{current_idx + 1}/{len(modes)}", True, (150, 150, 150)
+    )
+    SCREEN.blit(
+        indicator,
+        (SCREEN_WIDTH // 2 - indicator.get_width() // 2, bar_y + bar_height + 2),
+    )
+
+
 def disegna_pulsanti(config, selezionato=None):
-    buttons = config.get("buttons", config)
     num_buttons = get_num_buttons(config)
+    modes = config.get("modes", [])
+    current_idx = config.get("current_mode_index", 0)
+    buttons = modes[current_idx]["buttons"] if modes else {}
     rows = math.ceil(num_buttons / COLS)
 
     SCREEN.fill((30, 30, 30))
+
+    # Draw mode selector bar at top
+    disegna_mode_selector(config)
 
     total_width = COLS * BTN_SIZE + (COLS - 1) * (SPACING_X - BTN_SIZE)
     start_x = (SCREEN_WIDTH - total_width) // 2
@@ -121,7 +211,9 @@ def disegna_pulsanti(config, selezionato=None):
 def disegna_configuratore_avanzato(selezionato, config):
     global tipo_button_rects, cancel_button_rect, input_rect, browse_button_rect
 
-    buttons = config.get("buttons", config)
+    modes = config.get("modes", [])
+    current_idx = config.get("current_mode_index", 0)
+    buttons = modes[current_idx]["buttons"] if modes else {}
     num_buttons = get_num_buttons(config)
     rows = math.ceil(num_buttons / COLS)
 
@@ -137,35 +229,45 @@ def disegna_configuratore_avanzato(selezionato, config):
     # Dynamic base_y based on grid height
     base_y = MARGIN_Y + rows * SPACING_Y + 5 + 10 + BTN_SIZE + 10
 
-    btn_width = 100
-    btn_height = 40
-    spazio = 12
-    num_types = len(ACTION_TYPES)
-    total_width = num_types * btn_width + (num_types - 1) * spazio
-    start_x = (SCREEN_WIDTH - total_width) // 2
+    # Two rows of action type buttons
+    btn_width = 80
+    btn_height = 35
+    spazio = 10
+    types_per_row = 4
 
     tipo_button_rects = {}
     input_rect = None
     browse_button_rect = None
 
-    for i, (key, label) in enumerate(ACTION_TYPES):
-        x = start_x + i * (btn_width + spazio)
-        y = base_y
-        attivo = (key == tipo)
-        colore = (200, 120, 40) if attivo else (80, 80, 80)
+    for row_num in range(2):
+        row_types = ACTION_TYPES[row_num * types_per_row : (row_num + 1) * types_per_row]
+        total_width = len(row_types) * btn_width + (len(row_types) - 1) * spazio
+        start_x = (SCREEN_WIDTH - total_width) // 2
 
-        rect = pygame.Rect(x, y, btn_width, btn_height)
-        # Key the dict by the internal key (uppercase) so main.py mapping works
-        tipo_button_rects[key.upper()] = rect
+        for i, (key, label) in enumerate(row_types):
+            x = start_x + i * (btn_width + spazio)
+            y = base_y + row_num * (btn_height + 8)
+            attivo = (key == tipo)
+            colore = (200, 120, 40) if attivo else (80, 80, 80)
 
-        pygame.draw.rect(SCREEN, colore, rect, border_radius=6)
-        testo = small_font.render(label, True, (255, 255, 255))
-        SCREEN.blit(testo, testo.get_rect(center=rect.center))
+            rect = pygame.Rect(x, y, btn_width, btn_height)
+            tipo_button_rects[key.upper()] = rect
 
-    base_y += btn_height + 15
+            pygame.draw.rect(SCREEN, colore, rect, border_radius=6)
+            testo = small_font.render(label, True, (255, 255, 255))
+            SCREEN.blit(testo, testo.get_rect(center=rect.center))
 
-    if tipo == "link":
-        label = small_font.render("ENTER URL:", True, (200, 200, 200))
+    base_y += 2 * (btn_height + 8) + 10
+
+    if tipo in INPUT_TYPES:
+        if tipo == "link":
+            label_text = "ENTER URL:"
+        elif tipo == "shortcut":
+            label_text = "ENTER SHORTCUT (e.g. cmd+shift+4):"
+        else:
+            label_text = "ENTER VALUE:"
+
+        label = small_font.render(label_text, True, (200, 200, 200))
         SCREEN.blit(label, (50, base_y))
 
         base_y += label.get_height() + 5
@@ -173,13 +275,13 @@ def disegna_configuratore_avanzato(selezionato, config):
         input_rect = pygame.Rect(50, base_y, 540, 30)
         pygame.draw.rect(SCREEN, (255, 255, 255), input_rect, border_radius=4)
 
-        testo_url = valore if valore else ""
-        render_text = small_font.render(testo_url, True, (0, 0, 0))
+        testo_input = valore if valore else ""
+        render_text = small_font.render(testo_input, True, (0, 0, 0))
         SCREEN.blit(render_text, (input_rect.x + 5, input_rect.y + 7))
 
         base_y += 40
 
-    elif tipo == "exe":
+    elif tipo in BROWSE_TYPES:
         label = small_font.render("SELECT APPLICATION:", True, (200, 200, 200))
         SCREEN.blit(label, (50, base_y))
 
@@ -197,20 +299,9 @@ def disegna_configuratore_avanzato(selezionato, config):
 
         base_y += 40
 
-    elif tipo == "shortcut":
-        label = small_font.render("ENTER SHORTCUT (e.g. cmd+shift+4):", True, (200, 200, 200))
-        SCREEN.blit(label, (50, base_y))
-
-        base_y += label.get_height() + 5
-
-        input_rect = pygame.Rect(50, base_y, 540, 30)
-        pygame.draw.rect(SCREEN, (255, 255, 255), input_rect, border_radius=4)
-
-        testo_shortcut = valore if valore else ""
-        render_text = small_font.render(testo_shortcut, True, (0, 0, 0))
-        SCREEN.blit(render_text, (input_rect.x + 5, input_rect.y + 7))
-
-        base_y += 40
+    else:
+        # none, volume_up, volume_down, mute, media — no input needed
+        base_y += 10
 
     # Cancel and Save buttons
     button_y = base_y + 20
@@ -246,7 +337,9 @@ def is_dirty(selezionato, config):
     if not selezionato:
         return False
 
-    buttons = config.get("buttons", config)
+    modes = config.get("modes", [])
+    current_idx = config.get("current_mode_index", 0)
+    buttons = modes[current_idx]["buttons"] if modes else {}
     current = buttons.get(selezionato, {"type": "none", "value": ""})
     tipo = temp_config_type if temp_config_type is not None else current["type"]
     valore = temp_config_value if temp_config_value is not None else current["value"]
