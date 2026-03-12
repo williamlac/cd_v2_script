@@ -43,7 +43,7 @@ uint8_t memPercent = 0;
 float displayOffset = 0.0;
 unsigned long lastKnobTime = 0;
 bool wheelActive = false;
-#define WHEEL_TIMEOUT 1500   // ms to settle after last knob turn
+#define WHEEL_TIMEOUT 3000   // ms to show picker after last knob turn
 #define ITEM_HEIGHT 20       // pixels per mode entry in picker
 
 // --- Stats bar layout ---

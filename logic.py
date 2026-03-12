@@ -530,6 +530,7 @@ def ascolta_seriale(config):
                         new_index = int(linea.split(":")[1])
                         set_current_mode_index(config, new_index)
                         save_config(config)
+                        last_config_mtime = os.path.getmtime(CONFIG_FILE)
                         mode_name = get_current_mode(config)["name"]
                         print(f"[DEBUG] Mode switched to: {mode_name}")
                     except (ValueError, IndexError):
