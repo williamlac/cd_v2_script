@@ -1,94 +1,203 @@
-# 🎮 ConsoleDeck
+# ConsoleDeck V2 (macOS)
 
-ConsoleDeck is a simple graphical interface that allows you to configure up to 9 buttons to launch websites or executable files with a click.  
-Ideal for creating your own customizable macro deck or personal launcher.
+ConsoleDeck is a customizable macro deck that lets you configure buttons to launch websites, applications, or fire keyboard shortcuts.
+It integrates with Arduino hardware for physical button presses, volume control, and media playback.
 
 ---
 
-## ✅ Requirements
+## Requirements
 
-- A Windows PC
+- macOS 10.15 or later
 - Python 3.11 or higher
-- Internet connection (only for the initial setup)
+- [uv](https://docs.astral.sh/uv/) package manager
+- Arduino (optional, for hardware buttons)
 
 ---
 
-## 🐍 Step 1 – Install Python
+## Setup
 
-1. Go to 👉 [https://www.python.org/downloads/](https://www.python.org/downloads/)
-2. Download the latest version of Python 3
-3. During installation, **check the box** ✅ **"Add Python to PATH"**
-4. Click **Install Now**
-
----
-
-## 📦 Step 2 – Install required libraries
-
-1. Open the Start menu
-2. Type `cmd` and press Enter
-3. In the terminal window, paste the following command:
+### 1. Install uv
 
 ```bash
-pip install pygame pyperclip pyserial
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-If you get an error like `'pip' is not recognized`, try restarting your PC.
-
----
-
-## ▶️ Step 3 – Run ConsoleDeck
-
-1. Download all project files into a folder (e.g., Desktop)
-2. Open that folder in the terminal (`cmd`)
-3. Start the app with this command:
+### 2. Install dependencies
 
 ```bash
-python main.py --gui
+cd cd_v2_script
+uv sync
 ```
 
-If everything is set up correctly, a graphical window will open.
+---
+
+## Usage
+
+### GUI Mode (configure buttons)
+
+```bash
+uv run python main.py --gui
+```
+
+Or use the shell script:
+
+```bash
+./consoledeck.sh
+```
+
+### Serial Mode (listen for Arduino)
+
+```bash
+uv run python main.py
+```
+
+Or:
+
+```bash
+./avvio_consoledeck.sh
+```
+
+### Auto-start on login (run in background)
+
+To have ConsoleDeck start automatically on login and run silently in the background, create a LaunchAgent. This is the recommended way to use it daily — no terminal window needed, and it restarts automatically if it crashes.
+
+**1. Create the plist file:**
+
+```bash
+cat > ~/Library/LaunchAgents/com.consoledeck.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.consoledeck</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/williamlac/Personal/Programming/cd_v2_script/.venv/bin/python</string>
+        <string>/Users/williamlac/Personal/Programming/cd_v2_script/main.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/williamlac/Personal/Programming/cd_v2_script</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/consoledeck.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/consoledeck.log</string>
+</dict>
+</plist>
+EOF
+```
+
+**2. Load it (starts immediately and on every login):**
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.consoledeck.plist
+```
+
+**Manage the service:**
+
+```bash
+launchctl start com.consoledeck    # start manually
+launchctl stop com.consoledeck     # stop
+tail -f /tmp/consoledeck.log       # view live logs
+```
+
+**Remove from startup:**
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.consoledeck.plist
+```
 
 ---
 
-## ⚙️ Features
+## Button Types
 
-- Click one of the 9 buttons to assign an action
-- Choose between:
-  - a website URL (e.g. `https://youtube.com`)
-  - a `.exe` file on your PC
-  - or no action
-- Modify the fields directly inside the app
-- Use the "Browse" button to select `.exe` files
-- Save your changes only when you're ready
-- Supports volume control, mute toggle, and media play/pause via serial
+| Type | Description |
+|------|-------------|
+| **LINK** | Opens a URL in your default browser |
+| **APP** | Launches a macOS application (.app bundle) or executable |
+| **SHORTCUT** | Fires a keyboard shortcut (e.g. `cmd+shift+4` for screenshot) |
+| **NONE** | No action |
 
-Settings are stored in a local file called `config.json`.
+### Shortcut Format
 
----
+Shortcuts are written as modifier keys joined by `+`, followed by the key:
 
-## ❓ Troubleshooting
+- `cmd+shift+4` — screenshot selection
+- `cmd+space` — Spotlight
+- `cmd+c` — copy
+- `ctrl+alt+delete` — (example with multiple modifiers)
 
-**🟡 Nothing happens when I click a button?**  
-Make sure you launched the app using: `python main.py --gui`
+**Modifiers**: `cmd`, `shift`, `ctrl`, `alt` (or `option`)
 
-**🔗 Can I use YouTube or other links?**  
-Yes, any valid `https://` link will work.
-
-**🧩 Can I assign programs like `.exe` files?**  
-Yes! Use the “Browse” button to pick an executable file.
-
-**💾 It says 'pip' is not recognized**  
-Restart your computer or reinstall Python and ensure "Add Python to PATH" is selected during setup.
+**Special keys**: `space`, `return`, `tab`, `escape`, `delete`, `up`, `down`, `left`, `right`, `f1`-`f12`
 
 ---
 
-## 🧼 How to uninstall
+## Configuration
 
-- You can delete the project folder at any time
-- To uninstall Python, go to **Apps & Features** in Windows
+Settings are stored in `config.json`. The number of buttons is configurable:
+
+```json
+{
+  "settings": {
+    "num_buttons": 9
+  },
+  "buttons": {
+    "BUTTON_1": {"type": "link", "value": "https://www.youtube.com"},
+    "BUTTON_2": {"type": "shortcut", "value": "cmd+shift+4"},
+    "BUTTON_3": {"type": "exe", "value": "/Applications/Safari.app"},
+    ...
+  }
+}
+```
+
+Change `num_buttons` to add more buttons (the GUI grid adjusts automatically).
 
 ---
 
-## 📬 Need help?
+## Arduino
 
-If you get stuck or the app doesn’t behave as expected, feel free to contact the developer or open an issue on the project repository.
+The Arduino is auto-detected on macOS. It looks for devices matching common Arduino chipsets (Arduino, CH340, CP210x) or falls back to `/dev/cu.usbmodem*` ports.
+
+The Arduino firmware sends these serial messages:
+- `BUTTON_1` through `BUTTON_N` — trigger button actions
+- `VOLUME_<number>` — adjust system volume
+- `MUTE` — toggle mute
+- `MEDIA` — play/pause (targets Spotify first, then Music)
+
+---
+
+## Permissions
+
+The **Shortcut** button type requires Accessibility permissions:
+
+1. Open **System Settings > Privacy & Security > Accessibility**
+2. Add your terminal app (Terminal, iTerm2, etc.) to the allowed list
+
+This is required because keyboard shortcuts are simulated via macOS System Events.
+
+---
+
+## Troubleshooting
+
+**GUI doesn't open?**
+Make sure you're using `--gui` flag: `uv run python main.py --gui`
+
+**Arduino not detected?**
+Check that the Arduino is connected and visible in `/dev/cu.usbmodem*`. You may need to install CH340 drivers for Arduino clones.
+
+**Shortcuts don't work?**
+Grant Accessibility permissions to your terminal app (see Permissions section above).
+
+**`uv` not found?**
+Install it: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+---
+
+## Uninstall
+
+Delete the project folder. To remove uv: `rm ~/.local/bin/uv`
