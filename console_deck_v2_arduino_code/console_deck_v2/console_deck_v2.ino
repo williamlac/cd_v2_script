@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <avr/pgmspace.h>
 
 // --- Pin definitions ---
 #define CLK 5       // Rotary encoder CLK
@@ -32,14 +33,25 @@ bool modesReceived = false;
 
 // Encoder quadrature lookup: maps 4-bit (prevAB << 2 | newAB) to direction
 // +1 = CW, -1 = CCW, 0 = bounce/invalid
-static const int8_t ENC_STATES[] = {0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0};
+static const int8_t ENC_STATES[] PROGMEM = {0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0};
+
+// --- System stats from Python ---
+uint8_t cpuPercent = 0;
+uint8_t memPercent = 0;
 
 // --- Wheel animation ---
 float displayOffset = 0.0;
 unsigned long lastKnobTime = 0;
 bool wheelActive = false;
-#define WHEEL_TIMEOUT 1500   // ms to settle after last knob turn
+#define WHEEL_TIMEOUT 3000   // ms to show picker after last knob turn
 #define ITEM_HEIGHT 20       // pixels per mode entry in picker
+
+// --- Stats bar layout ---
+#define BAR_X      24
+#define BAR_W      76
+#define BAR_H      10
+#define CPU_BAR_Y  24
+#define MEM_BAR_Y  46
 
 // --- Display refresh ---
 unsigned long lastDisplayUpdate = 0;
@@ -65,14 +77,14 @@ void setup() {
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(1);
     display.setCursor(16, 24);
-    display.println("Waiting for");
+    display.println(F("Waiting for"));
     display.setCursor(28, 36);
-    display.println("config...");
+    display.println(F("config..."));
     display.display();
   }
 
   // Tell Python we're ready to receive config
-  Serial.println("READY");
+  Serial.println(F("READY"));
 }
 
 void loop() {
@@ -89,13 +101,13 @@ void loop() {
   }
 }
 
-// --- Serial input: parse MODES: and SET_MODE: from Python ---
+// --- Serial input: parse MODES:, SET_MODE:, STATS: from Python ---
 // Uses a static char buffer to avoid any heap allocation (String class)
 static char serialBuf[80];
 static uint8_t serialPos = 0;
 
 void processLine(const char* line) {
-  if (strncmp(line, "MODES:", 6) == 0) {
+  if (strncmp_P(line, PSTR("MODES:"), 6) == 0) {
     const char* payload = line + 6;
     numModes = 0;
     const char* start = payload;
@@ -117,13 +129,21 @@ void processLine(const char* line) {
     virtualMode = currentMode;
     displayOffset = (float)virtualMode;
   }
-  else if (strncmp(line, "SET_MODE:", 9) == 0) {
+  else if (strncmp_P(line, PSTR("SET_MODE:"), 9) == 0) {
     int idx = atoi(line + 9);
     if (idx >= 0 && idx < numModes) {
       currentMode = idx;
       virtualMode = idx;
       displayOffset = (float)idx;
       wheelActive = false;
+    }
+  }
+  else if (strncmp_P(line, PSTR("STATS:"), 6) == 0) {
+    const char* payload = line + 6;
+    const char* comma = strchr(payload, ',');
+    if (comma) {
+      cpuPercent = (uint8_t)constrain(atoi(payload), 0, 100);
+      memPercent = (uint8_t)constrain(atoi(comma + 1), 0, 100);
     }
   }
 }
@@ -156,7 +176,7 @@ void handleEncoder() {
   uint8_t newAB  = (clkVal << 1) | dtVal;
   uint8_t prevAB = oldAB & 0x03;
   oldAB = ((oldAB << 2) | newAB) & 0x0f;
-  int8_t step = ENC_STATES[oldAB];
+  int8_t step = pgm_read_byte(&ENC_STATES[oldAB]);
   accumulator += step;
 
   // One detent = 2 raw quadrature steps on this encoder
@@ -165,14 +185,14 @@ void handleEncoder() {
     if (!modesReceived || numModes == 0) return;
     virtualMode++;
     currentMode = ((virtualMode % numModes) + numModes) % numModes;
-    Serial.print("MODE:"); Serial.println(currentMode);
+    Serial.print(F("MODE:")); Serial.println(currentMode);
     lastKnobTime = millis(); wheelActive = true;
   } else if (accumulator <= -2) {
     accumulator = 0;
     if (!modesReceived || numModes == 0) return;
     virtualMode--;
     currentMode = ((virtualMode % numModes) + numModes) % numModes;
-    Serial.print("MODE:"); Serial.println(currentMode);
+    Serial.print(F("MODE:")); Serial.println(currentMode);
     lastKnobTime = millis(); wheelActive = true;
   }
 }
@@ -180,7 +200,7 @@ void handleEncoder() {
 // --- Encoder button press ---
 void handleEncoderPress() {
   if (digitalRead(SW) == LOW) {
-    Serial.println("MODE_PRESS");
+    Serial.println(F("MODE_PRESS"));
     delay(200);  // debounce
   }
 }
@@ -189,7 +209,7 @@ void handleEncoderPress() {
 void handleButtons() {
   for (int i = 0; i < NUM_BUTTONS; i++) {
     if (digitalRead(buttonPins[i]) == LOW) {
-      Serial.print("BUTTON_");
+      Serial.print(F("BUTTON_"));
       Serial.println(i + 1);
       delay(200);  // debounce
     }
@@ -253,18 +273,42 @@ void updateDisplay() {
       }
     }
   } else {
-    // Static display: show current mode name large and centered
-    display.setTextSize(2);
+    // Static display: mode name + CPU bar + MEM bar
     char name[MAX_NAME_LEN + 1];
     strncpy(name, modeNames[currentMode], MAX_NAME_LEN);
     name[MAX_NAME_LEN] = '\0';
-    if (strlen(name) > 10) name[10] = '\0';
 
+    // Mode name centered at top
+    display.setTextSize(1);
     int16_t x1, y1;
     uint16_t w, h;
     display.getTextBounds(name, 0, 0, &x1, &y1, &w, &h);
-    display.setCursor((SCREEN_WIDTH - w) / 2, (SCREEN_HEIGHT - h) / 2);
+    display.setCursor((SCREEN_WIDTH - w) / 2, 2);
     display.print(name);
+
+    // Horizontal line separator
+    display.drawLine(0, 14, SCREEN_WIDTH, 14, SSD1306_WHITE);
+
+    // CPU bar
+    display.setTextSize(1);
+    display.setCursor(0, CPU_BAR_Y + 1);
+    display.print(F("CPU"));
+    display.drawRect(BAR_X, CPU_BAR_Y, BAR_W, BAR_H, SSD1306_WHITE);
+    int cpuFill = (int)((long)cpuPercent * (BAR_W - 2) / 100);
+    if (cpuFill > 0) display.fillRect(BAR_X + 1, CPU_BAR_Y + 1, cpuFill, BAR_H - 2, SSD1306_WHITE);
+    display.setCursor(BAR_X + BAR_W + 3, CPU_BAR_Y + 1);
+    display.print(cpuPercent);
+    display.print('%');
+
+    // MEM bar
+    display.setCursor(0, MEM_BAR_Y + 1);
+    display.print(F("MEM"));
+    display.drawRect(BAR_X, MEM_BAR_Y, BAR_W, BAR_H, SSD1306_WHITE);
+    int memFill = (int)((long)memPercent * (BAR_W - 2) / 100);
+    if (memFill > 0) display.fillRect(BAR_X + 1, MEM_BAR_Y + 1, memFill, BAR_H - 2, SSD1306_WHITE);
+    display.setCursor(BAR_X + BAR_W + 3, MEM_BAR_Y + 1);
+    display.print(memPercent);
+    display.print('%');
   }
 
   display.display();

@@ -7,6 +7,7 @@ import serial.tools.list_ports
 import glob
 import time
 import math
+import psutil
 
 BAUDRATE = 9600
 
@@ -243,6 +244,15 @@ def get_frontmost_app():
         return ""
 
 
+def send_stats_to_arduino(ser):
+    """Send CPU and memory usage to Arduino."""
+    cpu = int(psutil.cpu_percent(interval=None))
+    mem = int(psutil.virtual_memory().percent)
+    message = f"STATS:{cpu},{mem}\n"
+    ser.write(message.encode("utf-8"))
+    ser.flush()
+
+
 def send_modes_to_arduino(ser, config):
     """Send the mode name list to Arduino over serial."""
     modes = config.get("modes", [])
@@ -457,6 +467,7 @@ def ascolta_seriale(config):
             auto_switched = False
             pre_auto_mode_idx = config.get("current_mode_index", 0)
             last_app_check = 0.0
+            last_stats_send = 0.0
 
             while True:
                 # Hot-reload: resend config if file changed on disk
@@ -498,6 +509,15 @@ def ascolta_seriale(config):
                             send_set_mode_to_arduino(ser, pre_auto_mode_idx)
                             print(f"[DEBUG] App trigger: left app → restored mode {pre_auto_mode_idx}")
 
+                # Send CPU/MEM stats to Arduino every ~2 seconds
+                now_stats = time.time()
+                if now_stats - last_stats_send >= 2.0:
+                    last_stats_send = now_stats
+                    try:
+                        send_stats_to_arduino(ser)
+                    except Exception as e:
+                        print(f"[WARNING] Stats send failed: {e}")
+
                 linea = ser.readline().decode("utf-8").strip()
                 if not linea:
                     continue
@@ -510,6 +530,7 @@ def ascolta_seriale(config):
                         new_index = int(linea.split(":")[1])
                         set_current_mode_index(config, new_index)
                         save_config(config)
+                        last_config_mtime = os.path.getmtime(CONFIG_FILE)
                         mode_name = get_current_mode(config)["name"]
                         print(f"[DEBUG] Mode switched to: {mode_name}")
                     except (ValueError, IndexError):

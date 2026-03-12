@@ -1,4 +1,6 @@
 import argparse
+import os
+import sys
 import subprocess
 from logic import (
     load_config,
@@ -314,7 +316,25 @@ def main(gui_mode):
         ascolta_seriale(config)
 
 
+class _Tee:
+    """Write to multiple streams simultaneously."""
+    def __init__(self, *streams):
+        self.streams = streams
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
+
 if __name__ == "__main__":
+    # Clear and open log file; tee stdout+stderr to it for this session
+    _log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "consoledeck.log")
+    _log_fh = open(_log_path, "w", buffering=1)
+    sys.stdout = _Tee(sys.__stdout__, _log_fh)
+    sys.stderr = _Tee(sys.__stderr__, _log_fh)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--gui", action="store_true", help="Launch the configuration GUI")
     args = parser.parse_args()
