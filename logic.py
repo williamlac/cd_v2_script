@@ -407,6 +407,29 @@ def _handle_none(value):
     print("[DEBUG] No action defined")
 
 
+def _handle_script(value):
+    """Open a Terminal window, run an interactive bash script, then close it."""
+    if value:
+        try:
+            script = (
+                'tell application "Terminal"\n'
+                '  activate\n'
+                f'  set w to do script "bash {value}; exit"\n'
+                '  repeat\n'
+                '    delay 0.5\n'
+                '    if not busy of w then exit repeat\n'
+                '  end repeat\n'
+                '  close window 1\n'
+                '  quit\n'
+                'end tell'
+            )
+            subprocess.Popen(["osascript", "-e", script])
+        except Exception as e:
+            print(f"[ERROR] Executing script: {e}")
+    else:
+        print("[WARNING] No script path defined")
+
+
 # Action type registry — add new types here
 ACTION_HANDLERS = {
     "link": _handle_link,
@@ -417,6 +440,7 @@ ACTION_HANDLERS = {
     "volume_down": _handle_volume_down,
     "mute": _handle_mute,
     "media": _handle_media,
+    "script": _handle_script,
     "none": _handle_none,
 }
 

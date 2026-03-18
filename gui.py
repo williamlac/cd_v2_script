@@ -50,13 +50,14 @@ ACTION_TYPES = [
     ("volume_down", "VOL-"),
     ("mute", "MUTE"),
     ("media", "MEDIA"),
+    ("script", "SCRIPT"),
 ]
 
 # Types that need a text input field
-INPUT_TYPES = {"link", "shortcut"}
+INPUT_TYPES = {"link", "shortcut", "script"}
 
 # Types that need a browse button
-BROWSE_TYPES = {"exe"}
+BROWSE_TYPES = {"exe", "script"}
 
 
 def _compute_screen_height(num_buttons):
